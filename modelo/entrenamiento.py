@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score
 import pickle
 import os
 
@@ -23,26 +24,19 @@ df = pd.DataFrame({
     'recordatorio_previo': recordatorio
 })
 
-# Calcular riesgo CONTINUO con factores de riesgo Y protección
+# Calcular riesgo CONTINUO con factores de riesgo y protección
 riesgo = (
-    # Factores de RIESGO
-    (df['edad'] > 65).astype(float) * 0.30 +           
-    (df['edad'] < 30).astype(float) * (-0.15) +        
-    (df['recordatorio_previo'] == 0).astype(float) * 0.25 +  
-    (df['tipo_cita'] == 'laboratorio').astype(float) * 0.20 + 
-    (df['genero'] == 'M').astype(float) * 0.05 +       
-    
-    # Factores PROTECTORES
-    (df['tipo_cita'] == 'control').astype(float) * (-0.10) + 
-    (df['dia_semana'] == 'lunes').astype(float) * (-0.08) +   
-    (df['dia_semana'] == 'viernes').astype(float) * 0.12      
+    (df['edad'] > 65).astype(float) * 0.30 +
+    (df['edad'] < 30).astype(float) * (-0.15) +
+    (df['recordatorio_previo'] == 0).astype(float) * 0.25 +
+    (df['tipo_cita'] == 'laboratorio').astype(float) * 0.20 +
+    (df['tipo_cita'] == 'control').astype(float) * (-0.10) +
+    (df['dia_semana'] == 'viernes').astype(float) * 0.12 +
+    (df['dia_semana'] == 'lunes').astype(float) * (-0.08) +
+    (df['genero'] == 'M').astype(float) * 0.05 +
+    np.random.normal(0, 0.08, n)
 )
-
-# Añadir ruido y acotar entre 0 y 1
-riesgo = riesgo + np.random.normal(0, 0.08, n)
 riesgo = np.clip(riesgo, 0, 1)
-
-# VARIABLE OBJETIVO: riesgo continuo
 y = riesgo
 
 # Codificación One-Hot
@@ -56,22 +50,40 @@ columnas = [
     'dia_semana_jueves', 'dia_semana_viernes'
 ]
 
-# Asegurar que todas las columnas existan
 for col in columnas:
     if col not in df_encoded.columns:
         df_encoded[col] = 0
 
 X = df_encoded[columnas]
 
-# Entrenar modelo de regresión
-modelo = RandomForestRegressor(n_estimators=200, max_depth=8, random_state=42)
-modelo.fit(X, y)
+# SPLIT: 80% entrenamiento, 20% prueba
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-# Guardar
+# Entrenar modelo
+modelo = RandomForestRegressor(n_estimators=200, max_depth=8, random_state=42)
+modelo.fit(X_train, y_train)
+
+# EVALUAR en conjunto de prueba
+y_pred = modelo.predict(X_test)
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+print(f" Modelo entrenado con {len(X_train)} ejemplos y evaluado con {len(X_test)}.")
+print(f"Métricas en conjunto de prueba:")
+print(f"   - MSE: {mse:.4f}")
+print(f"   - R²:  {r2:.4f}")
+print(f"   - Riesgo promedio real: {y.mean():.2f}")
+
+# Guardar modelo
 os.makedirs('modelo', exist_ok=True)
 with open('modelo/modelo_no_show.pkl', 'wb') as f:
     pickle.dump(modelo, f)
 
-print(f" Modelo entrenado. Riesgo promedio: {y.mean():.2f}")
-print(f"Ejemplo: Paciente de 28 años con SMS → riesgo esperado ~0.05–0.15")
-print(f"Ejemplo: Paciente de 28 años sin SMS → riesgo esperado ~0.25–0.35 (MEDIA)")
+
+
+
+
+
+
